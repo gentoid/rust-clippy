@@ -54,6 +54,12 @@ declare_clippy_lint! {
     "public functions dereferencing raw pointer arguments but not marked `unsafe`"
 }
 
+declare_clippy_lint! {
+    pub TOO_LONG_FUNCTION_BODY,
+    style,
+    "function to not be too long"
+}
+
 #[derive(Copy, Clone)]
 pub struct Functions {
     threshold: u64,
@@ -69,7 +75,7 @@ impl Functions {
 
 impl LintPass for Functions {
     fn get_lints(&self) -> LintArray {
-        lint_array!(TOO_MANY_ARGUMENTS, NOT_UNSAFE_PTR_ARG_DEREF)
+        lint_array!(TOO_MANY_ARGUMENTS, NOT_UNSAFE_PTR_ARG_DEREF, TOO_LONG_FUNCTION_BODY)
     }
 }
 

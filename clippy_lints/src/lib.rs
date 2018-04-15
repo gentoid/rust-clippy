@@ -519,6 +519,7 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         formatting::SUSPICIOUS_ELSE_FORMATTING,
         functions::NOT_UNSAFE_PTR_ARG_DEREF,
         functions::TOO_MANY_ARGUMENTS,
+        functions::TOO_LONG_FUNCTION_BODY,
         identity_conversion::IDENTITY_CONVERSION,
         identity_op::IDENTITY_OP,
         if_let_redundant_pattern_matching::IF_LET_REDUNDANT_PATTERN_MATCHING,
