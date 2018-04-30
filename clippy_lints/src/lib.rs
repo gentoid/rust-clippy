@@ -13,10 +13,13 @@
 // FIXME(mark-i-m) remove after i128 stablization merges
 #![allow(stable_features)]
 #![feature(i128, i128_type)]
+#![feature(iterator_find_map)]
+
 
 #[macro_use]
 extern crate rustc;
 extern crate rustc_typeck;
+extern crate rustc_target;
 extern crate syntax;
 extern crate syntax_pos;
 
@@ -124,6 +127,7 @@ pub mod erasing_op;
 pub mod escape;
 pub mod eta_reduction;
 pub mod eval_order_dependence;
+pub mod excessive_precision;
 pub mod explicit_write;
 pub mod fallible_impl_from;
 pub mod format;
@@ -133,6 +137,7 @@ pub mod identity_conversion;
 pub mod identity_op;
 pub mod if_let_redundant_pattern_matching;
 pub mod if_not_else;
+pub mod infallible_destructuring_match;
 pub mod infinite_iter;
 pub mod inline_fn_without_body;
 pub mod int_plus_one;
@@ -294,6 +299,7 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
     reg.register_early_lint_pass(box enum_variants::EnumVariantNames::new(conf.enum_variant_name_threshold));
     reg.register_late_lint_pass(box enum_glob_use::EnumGlobUse);
     reg.register_late_lint_pass(box enum_clike::UnportableVariant);
+    reg.register_late_lint_pass(box excessive_precision::ExcessivePrecision);
     reg.register_late_lint_pass(box bit_mask::BitMask::new(conf.verbose_bit_mask_threshold));
     reg.register_late_lint_pass(box ptr::PointerPass);
     reg.register_late_lint_pass(box needless_bool::NeedlessBool);
@@ -407,6 +413,7 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
     reg.register_late_lint_pass(box suspicious_trait_impl::SuspiciousImpl);
     reg.register_late_lint_pass(box redundant_field_names::RedundantFieldNames);
     reg.register_late_lint_pass(box map_unit_fn::Pass);
+    reg.register_late_lint_pass(box infallible_destructuring_match::Pass);
 
 
     reg.register_lint_group("clippy_restriction", vec![
@@ -443,8 +450,6 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         if_not_else::IF_NOT_ELSE,
         infinite_iter::MAYBE_INFINITE_ITER,
         items_after_statements::ITEMS_AFTER_STATEMENTS,
-        map_unit_fn::OPTION_MAP_UNIT_FN,
-        map_unit_fn::RESULT_MAP_UNIT_FN,
         matches::SINGLE_MATCH_ELSE,
         methods::FILTER_MAP,
         methods::OPTION_MAP_UNWRAP_OR,
@@ -512,6 +517,7 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         eta_reduction::REDUNDANT_CLOSURE,
         eval_order_dependence::DIVERGING_SUB_EXPRESSION,
         eval_order_dependence::EVAL_ORDER_DEPENDENCE,
+        excessive_precision::EXCESSIVE_PRECISION,
         explicit_write::EXPLICIT_WRITE,
         format::USELESS_FORMAT,
         formatting::POSSIBLE_MISSING_COMMA,
@@ -523,6 +529,7 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         identity_conversion::IDENTITY_CONVERSION,
         identity_op::IDENTITY_OP,
         if_let_redundant_pattern_matching::IF_LET_REDUNDANT_PATTERN_MATCHING,
+        infallible_destructuring_match::INFALLIBLE_DESTRUCTURING_MATCH,
         infinite_iter::INFINITE_ITER,
         inline_fn_without_body::INLINE_FN_WITHOUT_BODY,
         int_plus_one::INT_PLUS_ONE,
@@ -554,6 +561,8 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         loops::WHILE_LET_LOOP,
         loops::WHILE_LET_ON_ITERATOR,
         map_clone::MAP_CLONE,
+        map_unit_fn::OPTION_MAP_UNIT_FN,
+        map_unit_fn::RESULT_MAP_UNIT_FN,
         matches::MATCH_AS_REF,
         matches::MATCH_BOOL,
         matches::MATCH_OVERLAPPING_ARM,
@@ -686,9 +695,11 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         enum_variants::MODULE_INCEPTION,
         eq_op::OP_REF,
         eta_reduction::REDUNDANT_CLOSURE,
+        excessive_precision::EXCESSIVE_PRECISION,
         formatting::SUSPICIOUS_ASSIGNMENT_FORMATTING,
         formatting::SUSPICIOUS_ELSE_FORMATTING,
         if_let_redundant_pattern_matching::IF_LET_REDUNDANT_PATTERN_MATCHING,
+        infallible_destructuring_match::INFALLIBLE_DESTRUCTURING_MATCH,
         len_zero::LEN_WITHOUT_IS_EMPTY,
         len_zero::LEN_ZERO,
         let_if_seq::USELESS_LET_IF_SEQ,
@@ -775,6 +786,8 @@ pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
         loops::EXPLICIT_COUNTER_LOOP,
         loops::MUT_RANGE_BOUND,
         loops::WHILE_LET_LOOP,
+        map_unit_fn::OPTION_MAP_UNIT_FN,
+        map_unit_fn::RESULT_MAP_UNIT_FN,
         matches::MATCH_AS_REF,
         methods::CHARS_NEXT_CMP,
         methods::CLONE_ON_COPY,

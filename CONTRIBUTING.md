@@ -2,6 +2,23 @@
 
 Hello fellow Rustacean! Great to see your interest in compiler internals and lints!
 
+Clippy welcomes contributions from everyone. There are many ways to contribute to Clippy and the following document explains how
+you can contribute and how to get started.
+If you have any questions about contributing or need help with anything, feel free to ask questions on issues or
+visit the `#clippy` IRC channel on `irc.mozilla.org`.
+
+All contributors are expected to follow the [Rust Code of Conduct](http://www.rust-lang.org/conduct.html).
+
+* [Getting started](#getting-started)
+  * [Finding something to fix/improve](#finding-something-to-fiximprove)
+* [Writing code](#writing-code)
+  * [Author lint](#author-lint)
+  * [Documentation](#documentation)
+  * [Running test suite](#running-test-suite)
+  * [Testing manually](#testing-manually)
+  * [How Clippy works](#how-clippy-works)
+* [Contributions](#contributions)
+
 ## Getting started
 
 High level approach:
@@ -41,7 +58,7 @@ be more involved and require verifying types. The
 lot of methods that are useful, though one of the most useful would be `expr_ty` (gives the type of
 an AST expression). `match_def_path()` in Clippy's `utils` module can also be useful.
 
-### Writing code
+## Writing code
 
 Compiling clippy from scratch can take almost a minute or more depending on your machine.
 However, since Rust 1.24.0 incremental compilation is enabled by default and compile times for small changes should be quick.
@@ -52,11 +69,11 @@ to lint-writing, though it does get into advanced stuff. Most lints consist of a
 of this.
 
 
-#### Author lint
+### Author lint
 
 There is also the internal `author` lint to generate clippy code that detects the offending pattern. It does not work for all of the Rust syntax, but can give a good starting point.
 
-Create a new UI test with the pattern you want to match:
+First, create a new UI test file in the `tests/ui/` directory with the pattern you want to match:
 
 ```rust
 // ./tests/ui/my_lint.rs
@@ -71,7 +88,7 @@ fn main() {
 ```
 
 Now you run `TESTNAME=ui/my_lint cargo test --test compile-test` to produce
-the file with the generated code:
+a `.stdout` file with the generated code:
 
 ```rust
 // ./tests/ui/my_lint.stdout
@@ -87,7 +104,9 @@ if_chain! {
 }
 ```
 
-#### Documentation
+If the command was executed successfully, you can copy the code over to where you are implementing your lint.
+
+### Documentation
 
 Please document your lint with a doc comment akin to the following:
 
@@ -113,17 +132,19 @@ Once your lint is merged it will show up in the [lint list](https://rust-lang-nu
 
 ### Running test suite
 
-Clippy uses UI tests. UI tests check that the output of the compiler is exactly as expected.
-Of course there's little sense in writing the output yourself or copying it around.
-Therefore you can simply run `tests/ui/update-all-references.sh` (after running
-`cargo test`) and check whether the output looks as you expect with `git diff`. Commit all
-`*.stderr` files, too.
+Use `cargo test` to run the whole testsuite.
 
 If you don't want to wait for all tests to finish, you can also execute a single test file by using `TESTNAME` to specify the test to run:
 
 ```bash
 TESTNAME=ui/empty_line_after_outer_attr cargo test --test compile-test
 ```
+
+Clippy uses UI tests. UI tests check that the output of the compiler is exactly as expected.
+Of course there's little sense in writing the output yourself or copying it around.
+Therefore you should use `tests/ui/update-all-references.sh` (after running
+`cargo test`) and check whether the output looks as you expect with `git diff`. Commit all
+`*.stderr` files, too.
 
 ### Testing manually
 
@@ -138,9 +159,57 @@ enabled as a plugin:
 #![plugin(clippy)]
 ```
 
-## Contributions
+### How Clippy works
 
-Clippy welcomes contributions from everyone.
+Clippy is a [rustc compiler plugin][compiler_plugin]. The main entry point is at [`src/lib.rs`][main_entry]. In there, the lint registration is delegated to the [`clippy_lints`][lint_crate] crate.
+
+[`clippy_lints/src/lib.rs`][lint_crate_entry] imports all the different lint modules and registers them with the rustc plugin registry. For example, the [`else_if_without_else`][else_if_without_else] lint is registered like this:
+
+```rust
+// ./clippy_lints/src/lib.rs
+
+// ...
+pub mod else_if_without_else;
+// ...
+
+pub fn register_plugins(reg: &mut rustc_plugin::Registry) {
+    // ...
+    reg.register_early_lint_pass(box else_if_without_else::ElseIfWithoutElse);
+    // ...
+
+    reg.register_lint_group("clippy_restriction", vec![
+        // ...
+        else_if_without_else::ELSE_IF_WITHOUT_ELSE,
+        // ...
+    ]);
+}
+```
+
+The [`rustc_plugin::PluginRegistry`][plugin_registry] provides two methods to register lints: [register_early_lint_pass][reg_early_lint_pass] and [register_late_lint_pass][reg_late_lint_pass].
+Both take an object that implements an [`EarlyLintPass`][early_lint_pass] or [`LateLintPass`][late_lint_pass] respectively. This is done in every single lint. 
+It's worth noting that the majority of `clippy_lints/src/lib.rs` is autogenerated by `util/update_lints.py` and you don't have to add anything by hand. When you are writing your own lint, you can use that script to save you some time.
+
+```rust
+// ./clippy_lints/src/else_if_without_else.rs
+
+use rustc::lint::*;
+
+// ...
+
+pub struct ElseIfWithoutElse;
+
+// ...
+
+impl EarlyLintPass for ElseIfWithoutElse {
+    // ... the functions needed, to make the lint work
+}
+```
+
+The difference between `EarlyLintPass` and `LateLintPass` is that the methods of the `EarlyLintPass` trait only provide AST information. The methods of the `LateLintPass` trait are executed after type checking and contain type information via the `LateContext` parameter.
+
+That's why the `else_if_without_else` example uses the `register_early_lint_pass` function. Because the [actual lint logic][else_if_without_else] does not depend on any type information.
+
+## Contributions
 
 Contributions to Clippy should be made in the form of GitHub pull requests. Each pull request will
 be reviewed by a core contributor (someone with permission to land patches) and either landed in the
@@ -148,9 +217,15 @@ main tree or given feedback for changes that would be required.
 
 All code in this repository is under the [Mozilla Public License, 2.0](https://www.mozilla.org/MPL/2.0/)
 
-## Conduct
-
-We follow the [Rust Code of Conduct](http://www.rust-lang.org/conduct.html).
-
-
 <!-- adapted from https://github.com/servo/servo/blob/master/CONTRIBUTING.md -->
+
+[main_entry]: https://github.com/rust-lang-nursery/rust-clippy/blob/c5b39a5917ffc0f1349b6e414fa3b874fdcf8429/src/lib.rs#L14
+[lint_crate]: https://github.com/rust-lang-nursery/rust-clippy/tree/c5b39a5917ffc0f1349b6e414fa3b874fdcf8429/clippy_lints/src
+[lint_crate_entry]: https://github.com/rust-lang-nursery/rust-clippy/blob/c5b39a5917ffc0f1349b6e414fa3b874fdcf8429/clippy_lints/src/lib.rs
+[else_if_without_else]: https://github.com/rust-lang-nursery/rust-clippy/blob/c5b39a5917ffc0f1349b6e414fa3b874fdcf8429/clippy_lints/src/else_if_without_else.rs
+[compiler_plugin]: https://doc.rust-lang.org/unstable-book/language-features/plugin.html#lint-plugins
+[plugin_registry]: https://doc.rust-lang.org/nightly/nightly-rustc/rustc_plugin/registry/struct.Registry.html
+[reg_early_lint_pass]: https://doc.rust-lang.org/nightly/nightly-rustc/rustc_plugin/registry/struct.Registry.html#method.register_early_lint_pass
+[reg_late_lint_pass]: https://doc.rust-lang.org/nightly/nightly-rustc/rustc_plugin/registry/struct.Registry.html#method.register_late_lint_pass
+[early_lint_pass]: https://doc.rust-lang.org/nightly/nightly-rustc/rustc/lint/trait.EarlyLintPass.html
+[late_lint_pass]: https://doc.rust-lang.org/nightly/nightly-rustc/rustc/lint/trait.LateLintPass.html
